@@ -30,27 +30,27 @@
 \maketitle
 \newpage
 
-\chapter{NumPy As Strided}
+\chapter{NumPy As Strided Primer}
 
 \section{Motivation}
 
-The reason why learning \verb+as_strided+ is important is because of speed.
+\verb+as_strided+ is one of the core reasons why NumPy is fast.
 
-Take for example, if you want to do a $2 \times 2$ custom convolution on a $10 \times 10$ area, that is, you want to get all possible $2 \times 2$ windows to do a function on, it's efficient to do with \verb+as_strided+.
+A use case would be getting $2 \times 2$ windows from a $10 \times 10$ array as a reference using only a single call.
 
-The reason why it's efficient is because \verb+as_strided+ gets the values as a reference / view, so performing a \textbf{read-only} operation on them is very quick.
+References are efficient because \textbf{read-only} operations do not require copying values to another memory address.
 
 \section{Introduction}
 
-As expected of NumPy, when we do operations with their arrays, operations are light-speed fast, this is achieved by careful and memory safe operations. The assumption that the arrays are continuous is essential for fast memory addressing and retrieval.
+The assumption that the arrays are continuous is essential for fast memory addressing and retrieval.
 
-Take for example, if we want to place 3 numbers next to each other in memory.
+For example, 3 numbers next to each other in memory.
 
 $$(10, 20, 30)$$
 
 If they are represented by 1 Byte, in an unsigned fashion, we can achieve a range of $[0, 2^{8}-1] = [0, 255]$. Assume that in this context, they only need to be Byte aligned.
 
-This makes it really easy for NumPy to dispatch a data retrieval. If they are placed together, we can see that the data is simply the following in base 16.
+This makes it easy for NumPy to dispatch a data retrieval as they are partitioned evenly, getting the next value is just $address + itemsize$. The following illustrates the memory used for storing the values shown above.
 
 $$(0A_{16}, 14_{16}, 1E_{16})$$
 
@@ -62,7 +62,7 @@ NumPy only then needs to know the following:
 \item{How many objects are there?}
 \end{itemize}
 
-We're not too concerned about where addresses start since they are usually handled in the back-end, however, the last 2 questions is something we can redefine.
+We're not too concerned about start addresses, they are usually handled in the back-end. However, we can redefine object size, length, and stride.
 
 \section{1D Striding}
 
@@ -75,11 +75,11 @@ There are 2 main arguments we're concerned about.
 \item{Shape}
 \end{itemize}
 
-Data is \textbf{always} stored as a 1-Dimensional array in memory, we'll not go into details on memory retrieval.
+Data is \textbf{always} stored as a 1-Dimensional array in memory.
 
 \subsection{Stride By 1}
 
-Take for example, the following memory chunk, $n \in [0, 255]$
+E.g. the following memory chunk, $n \in [0, 255]$
 
 \begin{verbatim}
 VALUE 000 010 020 030 040 050 100 110 120 130 140 150
@@ -87,9 +87,9 @@ VALUE 000 010 020 030 040 050 100 110 120 130 140 150
 BYTE  005 006 007 008 009 010 011 012 013 014 015 016
 \end{verbatim}
 
-If we would want \textbf{all values}, we'd stride by a single byte, that is, we'd retrieve \verb+005, 006, 007, ...+. It's analogous to the step size, take a single byte-sized step every time.
+To get \textbf{all values}, we'd stride by a single byte, that is, we'd retrieve \verb+005, 006, 007, ...+. It's analogous to the step size, take a single byte-sized step every time.
 
-This can be done in the following code. Note that this is not complete as we're missing the \verb+shape+ argument but it will still run.
+This can be done in the following code. Note that this is incomplete due to the missing \verb+shape+ argument but it will still run.
 
 \begin{python}
 arr = np.append(np.arange(0, 60, 10, dtype=np.uint8),
@@ -122,7 +122,7 @@ BYTE  005 006 007 008 009 010 011 012 013 014 015 016
       ptr
 \end{verbatim}
 
-It's important to note that when you create an array, there's a pointer \verb+ptr+ that points to where the array starts. So when you do strides, it's relative to that point.
+Note that when you create an array, there's a pointer \verb+ptr+ that indicates where the array starts. So when you do strides, it's relative to that pointer.
 
 \begin{python}
 arr = np.append(np.arange(0, 60, 10, dtype=np.uint8),
@@ -138,9 +138,11 @@ np.lib.stride_tricks.as_strided(arr, strides=(2,))
 
 Interestingly enough, you may not even get the same result as I did, what happened here was an \textbf{Out of Bounds} memory access.
 
-Remember that you have an argument called \verb+shape+, that shape is implicitly passed and the algorithm assumes that you require the \textbf{same shape}. That's why it went beyond and out of bounds.
+Remember an argument called \verb+shape+, the shape is implicitly passed thus algorithm assumes the \textbf{same shape as the input}. That's why it went beyond and out of bounds.
 
-As warned in the NumPy Documentation on \href{https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.lib.stride_tricks.as_strided.html}{as\_strided}, accessing Out of Bounds is fine, but writing on it may corrupt memory, for this practise \verb+writeable+ by default, is \verb+False+, therefore you shouldn't run into any corruption problems but it's good to note.
+As warned in the NumPy Documentation on \href{https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.lib.stride_tricks.as_strided.html}{as\_strided}, accessing Out of Bounds is fine, but writing on it may corrupt memory.
+
+For this practise \verb+writeable+ by default, is \verb+False+, therefore it won't run into any corruption problems but it's good to note.
 
 \begin{verbatim}
 VALUE 000 010 020 030 040 050 100 110 120 130 140 150 ??? ??? ??? 
@@ -153,13 +155,13 @@ BYTE  005 006 007 008 009 010 011 012 013 014 015 016 017 018 019
 
 Shape is the bounds of where your strides should end at.
 
-By halving the shape and rounding it, we can limit where the stride should end. This requires knowledge of the shape, so we can just grab the \verb+shape+ property.
+By halving and rounding the shape, we limit where the stride should end. This requires the input shape, so we grab the \verb+shape+ property.
 
 \begin{python}
 np.lib.stride_tricks.as_strided(arr, strides=(2,), shape=(a.shape[0]//2,))
 \end{python}
 
-Note the extra comma to cast it as a \verb+Iterable+.
+Note the extra comma to cast it as an \verb+Iterable+.
 
 \begin{verbatim}
 >> array([  0,  20,  40, 100, 120, 140, 160], dtype=uint8)
@@ -167,7 +169,7 @@ Note the extra comma to cast it as a \verb+Iterable+.
 
 \section{2D Striding}
 
-This may be more confusing as we're going to wrap a 1D memory as a 2D object
+We're going to wrap a 1D memory as a 2D object
 
 Take for example the following
 
@@ -223,39 +225,7 @@ BYTE  001 002 003 | 004 005 006 | 007 008 009 | 010 011 012
           R_0           R_1           R_2           R_3
 \end{verbatim}
 
-You get the following separation. 
-
-Note the properties that you've taken.
-
-\begin{itemize}
-\item{For Each Row}
-\begin{itemize}
-\item{The step size is 1, that is we take every value}
-\item{The shape is 3, that is we have 3 values each row}
-\end{itemize}
-
-\item{For Each Column}
-\begin{itemize}
-\item{The step size is 3, that is, we move 3 steps in memory for each value}
-\item{The shape is 4, that is we have 4 values each column}
-\end{itemize}
-
-\item{Stride: $(C=3, R=1)$}
-\item{Shape: $(C=4, R=3)$}
-\end{itemize}
-
-It might be confusing why we move 3 steps in memory for columns. Let's look at the following illustration, this is \textbf{important} to understand.
-
-\begin{figure}[H]
-\begin{verbatim}
-VALUE 000 001 002 010 011 012 020 021 022 030 031 032
------ -----------------------------------------------
-BYTE  001 002 003 004 005 006 007 008 009 010 011 012
-DIM 0  0   1   2   0   1   2   0   1   2   0   1   2 
-DIM 1  0           1           2           3 
-\end{verbatim}
-\caption{Dimensional Mapping Diagram}
-\end{figure}
+Let's look at the following illustration, this is \textbf{important} to understand for the next few sections.
 
 \begin{figure}[H]
 \begin{equation*}
@@ -274,6 +244,8 @@ DIM 1  0           1           2           3
 
 \begin{shaded}
 Here, the horizontal elements represent Dim 0, while the vertical elements represent Dim 1.
+
+Dim 1 Strides by 3, while Dim 0 Strides by 1.
 \end{shaded}
 
 \begin{python}
@@ -299,8 +271,6 @@ This is not too interesting as it seems to be logical on how it works, but what 
 VALUE 000 001 002 010 011 012 020 021 022 030 031 032 ??? ??? ???
 ----- -----------------------------------------------------------
 BYTE  001 002 003 004 005 006 007 008 009 010 011 012 013 014 015
-DIM 0  0   1   2       0   1   2       0   1   2       0   1   2  
-DIM 1  0               1               2               2          
 \end{verbatim}
 \end{figure}
 
@@ -320,7 +290,7 @@ DIM 1  0               1               2               2
 \end{figure}
 
 \begin{shaded}
-Similarly, horizontal is Dim 0, vertical is Dim 1.
+Dim 1 Strides by 4, while Dim 0 Strides by 1.
 
 Note how $013, 014, 015$ are all undefined in this context!
 \end{shaded}
@@ -345,9 +315,6 @@ What happens if you do too short of a stride?
 VALUE 000 001 002 010 011 012 020 021 022 030 031 032
 ----- -----------------------------------------------
 BYTE  001 002 003 004 005 006 007 008 009 010 011 012
-DIM 0  0   1   2       0   1   2  
-DIM 0          0   1   2       0   1   2 
-DIM 1  0       1       2       3 
 \end{verbatim}
 \end{figure}
 
@@ -367,7 +334,7 @@ DIM 1  0       1       2       3
 \end{figure}
 
 \begin{shaded}
-Similarly, horizontal is Dim 0, vertical is Dim 1.
+Dim 1 Strides by 2, while Dim 0 Strides by 1.
 
 Note how we can repeat the addresses, this is not dangerous as read-only data.
 \end{shaded}
@@ -388,10 +355,6 @@ Interestingly enough, we got overlapping values, we can take it 1 step further b
 VALUE 000 001 002 010 011 012 020 021 022 030 031 032
 ----- -----------------------------------------------
 BYTE  001 002 003 004 005 006 007 008 009 010 011 012
-DIM 0  0   1   2   0   1   2    
-DIM 0      0   1   2 
-DIM 0          0   1   2 
-DIM 1  0   1   2   3 
 \end{verbatim}
 \end{figure}
 
@@ -411,7 +374,7 @@ DIM 1  0   1   2   3
 \end{figure}
 
 \begin{shaded}
-Horizontal is Dim 0, Vertical is Dim 1.
+Dim 1 Strides by 1, and Dim 0 Strides by 1.
 \end{shaded}
 
 \begin{python}
@@ -513,8 +476,6 @@ np.lib.stride_tricks.as_strided(arr, strides=(2, 1), shape=(2, 2))
 VALUE  0       1       2       3   
 ----- ------------------------------
 BYTE   1   2   3   4   5   6   7   8
-DIM 0  0   1   0   1   
-DIM 1  0       1
 \end{verbatim}
 \end{figure}
 
@@ -542,8 +503,6 @@ np.lib.stride_tricks.as_strided(arr, strides=(3, 1), shape=(2, 2))
 VALUE  0       1       2       3   
 ----- ------------------------------
 BYTE   1   2   3   4   5   6   7   8
-DIM 0  0   1       0   1   
-DIM 1  0           1
 \end{verbatim}
 \end{figure}
 
@@ -630,6 +589,13 @@ Let's say we want to wrap this in a 2x3x4 cube matrix.
 \end{alignat*}
 \end{figure}
 
+\begin{shaded}
+Dim 2 Strides by 6,
+Dim 1 Strides by 3,
+Dim 0 Strides by 1.
+
+We'll use the following mathematical equations to explain this
+\end{shaded}
 \begin{align*}
 D_0&:(Stride=1, Shape=3)\\
 D_1&:(Stride=3, Shape=2)\\
